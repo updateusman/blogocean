@@ -6,7 +6,7 @@ const followSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "User", // One Who is been followed
     },
-    following: {
+    account: {
       type: Schema.Types.ObjectId,
       ref: "User", // On is following
     },

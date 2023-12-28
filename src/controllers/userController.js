@@ -3,7 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/userModel.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
-import { verifyJWT } from "../middlewares/authMiddleware.js";
+import monggoseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 
 const generateTokens = async (userId) => {
   try {
@@ -83,7 +83,9 @@ const loginUser = asyncHandler(async (req, res) => {
 
   const isPasswordValid = await user.comparePassword(password);
 
-  if (isPasswordValid) {
+  // console.log(isPasswordValid);
+
+  if (!isPasswordValid) {
     throw new ApiError(401, "Invalid Credentials");
   }
 
@@ -127,42 +129,294 @@ const logoutUser = asyncHandler(async (req, res) => {
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
   const incommingRefreshToken =
-    req.cookie?.refreshToken || req.body?.refreshToken;
+    req.cookies?.refreshToken || req.body?.refreshToken;
 
-  if (!refreshAccessToken) {
-    throw new ApiError(401, "No Refresh Token");
+  if (!incommingRefreshToken) {
+    throw new ApiError(401, "No Refresh Token ");
   }
+  console.log(incommingRefreshToken);
+  try {
+    const decodedToken = jwt.verify(
+      incommingRefreshToken,
+      process.env.REFRESH_TOKEN_SECRET
+    );
 
-  const decodedToken = jwt.verify(
-    incommingRefreshToken,
-    process.env.REFRESH_TOKEN_SECRET
-  );
+    const user = await User.findById(decodedToken?._id);
 
-  const user = await User.findById(decodedToken?._id);
+    if (!user || !user.refreshToken) {
+      throw new ApiError(401, "Invalid Refresh Token");
+    }
 
+    if (incommingRefreshToken !== user.refreshToken) {
+      throw new ApiError(401, "Refresh Token is Expired or Used");
+    }
+
+    const options = { httpOnly: true, secure: true };
+
+    const { accessToken, refreshToken } = await generateTokens(user._id);
+
+    return res
+      .status(200)
+      .cookie("refreshToken", refreshToken, options)
+      .cookie("accessToken", accessToken, options)
+      .json(
+        new ApiResponse(
+          200,
+          { refreshToken, accessToken },
+          "access Token refreshed Successfully"
+        )
+      );
+  } catch (error) {
+    throw new ApiError(401, error?.message || "Invalid Refresh Token");
+  }
+});
+
+const changeUserPassword = asyncHandler(async (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+
+  if (!oldPassword || !newPassword) {
+    throw new ApiError(401, "All Credentials Required");
+  }
+  // console.log(req.user._id);
+
+  const user = await User.findById(req.user?._id);
+  console.log(user.password);
   if (!user) {
-    throw new ApiError(401, "Invalid Refresh Token");
+    throw new ApiError(401, "User is not logged In");
   }
 
-  if (incommingRefreshToken === user?.refreshToken) {
-    throw new ApiError(401, "Refresh Token is Expired or Used");
+  const matchPassword = await user.comparePassword(oldPassword);
+
+  if (!matchPassword) {
+    throw new ApiError(401, "Incorrect Password");
   }
 
-  const options = { httpOnly: true, secure: true };
+  user.password = newPassword;
+  await user.save({ validateBeforeSave: true });
 
-  const { accessToken, newRefreshToken } = await generateTokens(user._id);
-
-  res
+  return res
     .status(200)
-    .cookie("refreshToken", newRefreshToken, options)
-    .cookie("accessToken", accessToken, options)
+    .json(new ApiResponse(200, "Password Changed Successfully"));
+});
+
+const getCurrentUser = asyncHandler(async (req, res) => {
+  return res
+    .status(200)
+    .json(new ApiResponse(200, req.user, "Current User fetched Successfully"));
+});
+
+const updateAccountDetails = asyncHandler(async (req, res) => {
+  const { fullName, email } = req.body;
+
+  if (!(fullName || email)) {
+    throw new ApiError(401, "Nothing to update");
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: {
+        fullName,
+        email,
+      },
+    },
+    { new: true }
+  ).select("-password -refreshToken ");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "Account Details Updated Sucefully"));
+});
+
+const avatarUpdate = asyncHandler(async (req, res) => {
+  const avatarLocalPath = req.file?.req.file?.path;
+  if (!avatarLocalPath) {
+    throw new ApiError(400, "Avatar file is missing");
+  }
+
+  const avatar = uploadOnCloudinary(avatarLocalPath);
+
+  if (!avatar.url) {
+    throw new ApiError(400, "Error While uploading avatar");
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: {
+        avatar: avatar.url,
+      },
+    },
+    { new: true }
+  ).select(-"password -refreshToken");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "avatar Updated Successfully"));
+});
+
+const updateUserCoverImage = asyncHandler(async (req, res) => {
+  const coverImageLocalPath = req.file?.path;
+
+  if (!coverImageLocalPath) {
+    throw new ApiError(401, "Cover Image File is Missing");
+  }
+
+  const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+  if (!coverImage.url) {
+    throw new ApiError(500, "Error While uploading coverImage");
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: {
+        coverImage: coverImage.url,
+      },
+    },
+    { new: true }
+  ).select("-password -refreshToken");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "coverImage Updated Successfully"));
+});
+
+const getUserAccountProfile = asyncHandler(async (req, res) => {
+  const { username } = req.params;
+
+  if (!username?.trim()) {
+    throw new ApiError(400, "Username is missing");
+  }
+
+  const account = await User.aggregate([
+    {
+      $match: {
+        username: username.toLowerCase(),
+      },
+    },
+    {
+      $lookup: {
+        from: "follows",
+        localField: _id,
+        foreignField: "account",
+        as: "followers",
+      },
+    },
+    {
+      $lookup: {
+        from: "follows",
+        localField: _id,
+        foreignField: "followedBy",
+        as: "following",
+      },
+    },
+    {
+      $addFields: {
+        followersCount: {
+          $size: "$followers",
+        },
+        accountFollowing: {
+          $size: "$following",
+        },
+        isFollowed: {
+          $cond: {
+            $if: { $in: [req.user?._id, "$followers.followers"] },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+    {
+      $project: {
+        fullName: 1,
+        username: 1,
+        followersCount: 1,
+        accountFollowing: 1,
+        isFollowed: 1,
+        avatar: 1,
+        coverImage: 1,
+        email: 1,
+        socialMediaLinks: 1,
+        bio: 1,
+      },
+    },
+  ]);
+
+  if (!account?.length) {
+    throw new ApiError(404, "Account does not exist");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, account[0], "User Account Fetched Succefully"));
+});
+
+const getWatchHistory = asyncHandler(async (req, res) => {
+  const user = User.aggregate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(req.user._id),
+      },
+    },
+    {
+      $lookup: {
+        from: "posts",
+        localField: "_id",
+        foreignField: "_id",
+        as: "watchHistory",
+        pipeline: [
+          {
+            lookup: {
+              from: "users",
+              localField: "author",
+              foreignField: "_id",
+              as: "author",
+              pipeline: [
+                {
+                  $project: {
+                    fullName: 1,
+                    username: 1,
+                    avatar: 1,
+                  },
+                },
+                {
+                  $addFields: {
+                    author: {
+                      $first: "$author",
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ]);
+
+  return res
+    .status(200)
     .json(
       new ApiResponse(
         200,
-        { refreshToken: newRefreshToken, accessToken },
-        "access Token refreshed Successfully"
+        user[0].watchHostory,
+        "Watch History fetched Successfully"
       )
     );
 });
 
-export { registerUser, loginUser, logoutUser, refreshAccessToken };
+export {
+  registerUser,
+  loginUser,
+  logoutUser,
+  refreshAccessToken,
+  changeUserPassword,
+  getCurrentUser,
+  updateAccountDetails,
+  avatarUpdate,
+  updateUserCoverImage,
+  getUserAccountProfile,
+  getWatchHistory,
+};
