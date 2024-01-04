@@ -3,7 +3,6 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/userModel.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
-import monggoseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 
 const generateTokens = async (userId) => {
   try {
@@ -44,9 +43,10 @@ const registerUser = asyncHandler(async (req, res) => {
 
   const user = await User.create({
     fullName,
-    username: username.toLowerCase(),
+    username,
     email,
     password,
+    bio,
   });
 
   const createdUser = await User.findById(user._id).select(
@@ -57,7 +57,7 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(501, "Error while creating user");
   }
 
-  res.status(200).json(new ApiResponse(201, "User Created Successfully"));
+  res.status(200).json(new ApiResponse(201, user, "User Created Successfully"));
 });
 
 const loginUser = asyncHandler(async (req, res) => {
@@ -298,7 +298,7 @@ const getUserAccountProfile = asyncHandler(async (req, res) => {
     {
       $lookup: {
         from: "follows",
-        localField: _id,
+        localField: "_id",
         foreignField: "account",
         as: "followers",
       },
@@ -306,7 +306,7 @@ const getUserAccountProfile = asyncHandler(async (req, res) => {
     {
       $lookup: {
         from: "follows",
-        localField: _id,
+        localField: "_id",
         foreignField: "followedBy",
         as: "following",
       },
@@ -320,11 +320,7 @@ const getUserAccountProfile = asyncHandler(async (req, res) => {
           $size: "$following",
         },
         isFollowed: {
-          $cond: {
-            $if: { $in: [req.user?._id, "$followers.followers"] },
-            then: true,
-            else: false,
-          },
+          $in: [req.user?._id, "$followers.followers"],
         },
       },
     },

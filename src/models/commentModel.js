@@ -1,6 +1,4 @@
-import mongoose from "mongoose";
-import { User } from "./userModel.js";
-import { Post } from "./postModel.js";
+import mongoose, { Schema } from "mongoose";
 
 const commentSchema = new mongoose.Schema(
   {
@@ -12,7 +10,7 @@ const commentSchema = new mongoose.Schema(
       type: Schema.Types.ObjectId,
       ref: "User",
     },
-    postId: {
+    postAbove: {
       type: Schema.Types.ObjectId,
       ref: "Post",
     },

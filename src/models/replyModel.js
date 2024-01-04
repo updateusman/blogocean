@@ -1,5 +1,4 @@
 import mongoose, { Schema } from "mongoose";
-import { User } from "./userModel.js";
 
 const replySchema = new Schema(
   {
@@ -15,11 +14,11 @@ const replySchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "User",
     },
-    replyingUnderComment: {
+    commentAbove: {
       type: Schema.Types.ObjectId,
       ref: "Comment",
     },
-    replyUnderPost: {
+    postAbove: {
       type: Schema.Types.ObjectId,
       ref: "Post",
     },
