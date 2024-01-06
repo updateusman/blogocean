@@ -493,4 +493,5 @@ export {
   updateUserCoverImage,
   getUserAccountProfile,
   getWatchHistory,
+  resetPassword
 };
