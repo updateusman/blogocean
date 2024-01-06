@@ -1,17 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 
-const textSchema = new Schema({
-  text: {
-    type: String,
-    required: true,
-  },
-  owner: {
-    type: Schema.Types.ObjectId,
-    ref: "User",
-  },
-});
-const Text = mongoose.model("Text", textSchema);
 const bodyElementSchema = new Schema(
   {
     type: {
@@ -26,7 +15,7 @@ const bodyElementSchema = new Schema(
 
   {
     _id: false,
-    discriminatorKey: "type",
+    // discriminatorKey: "type",
   }
 );
 
@@ -40,12 +29,11 @@ const postSchema = new Schema(
     featuredImage: {
       type: Schema.Types.ObjectId,
       ref: "Image",
-      required: true,
+      // required: true,
     },
     author: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
     body: [bodyElementSchema],
     tags: [
@@ -57,10 +45,8 @@ const postSchema = new Schema(
       type: String,
       required: true,
     },
-    isPublished: {
-      type: Boolean,
-      required: true,
-    },
+    isPublished: Boolean,
+
     publishDate: {
       type: Date,
       default: null,

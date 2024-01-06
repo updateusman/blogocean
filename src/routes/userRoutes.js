@@ -11,6 +11,7 @@ import {
   updateAccountDetails,
   getUserAccountProfile,
   getWatchHistory,
+  userEmailVerification,
 } from "../controllers/userController.js";
 import { upload } from "../middlewares/multerMiddleware.js";
 import { verifyJWT } from "../middlewares/authMiddleware.js";
@@ -27,6 +28,9 @@ router.route("/register").post(
 );
 
 router.route("/login").post(loginUser);
+
+//Email verification
+router.route("/verifyemail/:token").post(userEmailVerification);
 
 //Secured Routes
 

@@ -2,7 +2,6 @@ import { Post } from "../models/postModel.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { uploadOnCloudinary } from "../utils/clodinary.js";
 import { Image } from "../models/imageModel.js";
 
 const createPost = asyncHandler(async (req, res) => {
@@ -14,32 +13,35 @@ const createPost = asyncHandler(async (req, res) => {
   // create / save post in db
   // return reponse
   const { title, body, category, tags } = req.body;
-  console.log("Testing");
 
-  if ([title, body, category].some((field) => field === "")) {
+  // console.log(title, body, category);
+  if (
+    [title, body, category].some((field) => field === "" || field === undefined)
+  ) {
     throw new ApiError(401, "All Fields required");
   }
 
-  // if (featuredImageId) {
-  //   const img = await Image.findById(featuredImageId);
-  // } else {
-  // const featuredImageLocalPath = req.file?.path;
+  const featuredImageId = req.body.featuredImage;
+  // console.log(featuredImageId);
 
-  // if (!featuredImageLocalPath) {
-  //   throw new ApiError(404, "No Image Local Path Available");
-  // }
-  // const img = await uploadOnCloudinary(featuredImageLocalPath);
-  // }
+  if (!featuredImageId) {
+    throw new ApiError(401, "featured Image Required");
+  }
+  const imageFile = await Image.findById(featuredImageId);
+  console.log(imageFile);
 
-  // if (!img) {
-  //   throw new ApiError(404, "Featured Image is Required");
-  // }
+  if (!imageFile) {
+    throw new ApiError(404, "Featured Image is Required");
+  }
 
   const processedTags = tags ? tags.split(",").map((tag) => tag.trim()) : [];
 
   const preparedBody = [];
 
-  for (const element of bodyElement) {
+  // console.log(body);
+
+  for (const element of body) {
+    // console.log(element);
     if (element.type === "text") {
       preparedBody.push({ type: "text", content: element.content });
     } else if (element.type === "image") {
@@ -49,10 +51,12 @@ const createPost = asyncHandler(async (req, res) => {
 
   const post = await Post.create({
     title,
-    body,
+    body: preparedBody,
     category,
     tags: processedTags || [],
-    // featuredImage: img.url,
+    author: req.user._id,
+    featuredImage: imageFile,
+    
   });
 
   return res
@@ -84,7 +88,7 @@ const updatePost = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Please Select Post to Update");
   }
 
-  const updatedPost = await Post.findByIdAndUpdate(postId, req.bod, {
+  const updatedPost = await Post.findByIdAndUpdate(postId, req.body, {
     new: true,
   });
   if (!updatedPost) {

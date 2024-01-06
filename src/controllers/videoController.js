@@ -9,9 +9,9 @@ const createVideo = asyncHandler(async (req, res) => {
 
   console.log(title);
 
-  // if (!title) {
-  //   throw new ApiError(401, "Title is Required");
-  // }
+  if (!title) {
+    throw new ApiError(401, "Title is Required");
+  }
 
   const videoLocalPath = req.file?.path;
 
@@ -29,6 +29,7 @@ const createVideo = asyncHandler(async (req, res) => {
     title: title || "",
     description: description || "",
     videoFile: videoFile.url,
+    owner: req.user._id,
   });
 
   return res
@@ -36,4 +37,22 @@ const createVideo = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, video, "Video Created Succefully"));
 });
 
-export { createVideo };
+const getAllVideos = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+
+  if (!userId) {
+    throw new ApiError(401, "User is not Authenticated");
+  }
+
+  const videos = await Video.find({ owner: userId });
+
+  if (!videos) {
+    throw new ApiError(500, "Error While fetching Videos");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, videos, "Videos Fetched Succhefully"));
+});
+
+export { createVideo, getAllVideos };

@@ -32,7 +32,7 @@ const createImage = asyncHandler(async (req, res) => {
     const image = await Image.create({
       imageFile: imageFile.url,
       caption: caption || "",
-      owner,
+      owner: req.user._id,
     });
 
     return res
@@ -46,7 +46,15 @@ const createImage = asyncHandler(async (req, res) => {
 const getMyImages = asyncHandler(async (req, res) => {
   const userId = req.user?._id;
 
+  if (!userId) {
+    throw new ApiError(401, "User is not Authenticated");
+  }
+
   const images = await Image.find({ owner: userId });
+
+  if (!images) {
+    throw new ApiError(500, "Error While fetching Images");
+  }
 
   return res
     .status(200)

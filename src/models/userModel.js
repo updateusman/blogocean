@@ -51,6 +51,18 @@ const userSchema = new Schema(
     refreshToken: {
       type: String,
     },
+    isAdmin: {
+      type: Boolean,
+      default: true,
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    verifyToken: String,
+    verifyTokenExpiry: Date,
+    forgotPasswordToken: String,
+    forgotPasswordTokenExpiry: Date,
   },
   { timestamps: true }
 );

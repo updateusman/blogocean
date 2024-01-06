@@ -3,6 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/userModel.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
+import { verifyEmail } from "../utils/verifyMail.js";
 
 const generateTokens = async (userId) => {
   try {
@@ -54,10 +55,58 @@ const registerUser = asyncHandler(async (req, res) => {
   );
 
   if (!createdUser) {
-    throw new ApiError(501, "Error while creating user");
+    throw new ApiError(500, "Error while creating User");
   }
 
-  res.status(200).json(new ApiResponse(201, user, "User Created Successfully"));
+  try {
+    const sentMail = await verifyEmail({
+      email,
+      emailType: "VERIFY",
+      userId: createdUser._id,
+    });
+    console.log(sentMail);
+  } catch (error) {
+    throw new ApiError(500, "Error Sending Email", error.message);
+  }
+  // if (!sentMail) {
+  //   throw new ApiError(500, "Error Sending Email", error);
+  // }
+
+  return res
+    .status(201)
+    .json(new ApiResponse(201, user, "User Created Successfully"));
+});
+
+const userEmailVerification = asyncHandler(async (req, res) => {
+  // const reqBody = await req.body.json();
+  // const { token } = reqBody;
+  const { token } = req.query;
+  console.log(token);
+
+  const user = await User.findOne({
+    verifyToken: token,
+    verifyTokenExpiry: { $gt: Date.now() },
+  });
+  console.log(user);
+
+  if (!user) {
+    throw new ApiError(400, "Invalid Token", error);
+  }
+
+  user.isVerified = true;
+  user.verifyToken = undefined;
+  user.verifyTokenExpiry = undefined;
+  await user.save();
+
+  // try {
+  //   await verifyMail(token);
+  // } catch (error) {
+  //   throw new ApiError(401, "Error While getting token", error.message);
+  // }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Email verified successfully"));
 });
 
 const loginUser = asyncHandler(async (req, res) => {
@@ -79,6 +128,13 @@ const loginUser = asyncHandler(async (req, res) => {
 
   if (!user) {
     throw new ApiError(401, "User does not exist");
+  }
+
+  if (!user.isVerified) {
+    throw new ApiError(
+      400,
+      "Email is not Verified please check your Inbox and verify your email to login"
+    );
   }
 
   const isPasswordValid = await user.comparePassword(password);
@@ -197,6 +253,27 @@ const changeUserPassword = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, "Password Changed Successfully"));
+});
+
+const resetPassword = asyncHandler(async (req, res) => {
+  const { token } = req.query;
+
+  const user = User.findOne({
+    forgotPasswordToken: token,
+    forgotPasswordTokenExpiry: { $gt: Date.now() },
+  });
+
+  if (!user) {
+    throw new ApiError(400, "Invalid Token", error);
+  }
+
+  user.forgotPasswordToken = undefined;
+  user.forgotPasswordTokenExpiry = undefined;
+  await user.save();
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Password Reset Succefully"));
 });
 
 const getCurrentUser = asyncHandler(async (req, res) => {
@@ -405,6 +482,7 @@ const getWatchHistory = asyncHandler(async (req, res) => {
 
 export {
   registerUser,
+  userEmailVerification,
   loginUser,
   logoutUser,
   refreshAccessToken,
